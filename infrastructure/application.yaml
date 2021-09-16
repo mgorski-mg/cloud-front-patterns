@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  CloudFrontSecurityLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Add security headers
+      Role: !GetAtt CloudFrontLambdaRole.Arn
+      CodeUri: src/security/
+      Handler: security-lambda.handler
+      Runtime: nodejs14.x
+      Timeout: 1
+      MemorySize: 128
+      Tracing: Active
+      AutoPublishAlias: live
+
+  CloudFrontLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Action:
+            - sts:AssumeRole
+          Principal:
+            Service:
+              - lambda.amazonaws.com
+              - edgelambda.amazonaws.com
+
+  CloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Logging:
+          Bucket: !GetAtt LoggingBucket.DomainName
+          IncludeCookies: false
+          Prefix: CloudFront/
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        DefaultCacheBehavior:
+          TargetOriginId: Custom-website
+          ViewerProtocolPolicy: redirect-to-https
+          MinTTL: 0
+          AllowedMethods:
+            - HEAD
+            - GET
+            - OPTIONS
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - HEAD
+            - GET
+            - OPTIONS
+          Compress: true
+          LambdaFunctionAssociations:
+            - EventType: viewer-response
+              LambdaFunctionARN: !Ref CloudFrontSecurityLambda.Version
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: all
+            Headers:
+              - Accept
+        Origins:
+          - DomainName: !GetAtt WebsiteBucket.DomainName
+            Id: S3-website
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}
+          - DomainName: rozchmurzeni.pl
+            Id: Custom-website
+            CustomOriginConfig:
+              HTTPSPort: '443'
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+
+  CloudFrontOriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub Identity to access ${WebsiteBucket}
+
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
+            Action: s3:GetObject
+            Resource: !Sub ${WebsiteBucket.Arn}/*
+
+  LoggingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays: 180
+            Status: Enabled
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
