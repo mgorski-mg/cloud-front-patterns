@@ -2,18 +2,36 @@ AWSTemplateFormatVersion: 2010-09-09
 Transform: AWS::Serverless-2016-10-31
 
 Resources:
-  CloudFrontSecurityLambda:
-    Type: AWS::Serverless::Function
+  CloudFrontSecurityFunction:
+    Type: AWS::CloudFront::Function
     Properties:
-      Description: Add security headers
-      Role: !GetAtt CloudFrontLambdaRole.Arn
-      CodeUri: src/security/
-      Handler: security-lambda.handler
-      Runtime: nodejs14.x
-      Timeout: 1
-      MemorySize: 128
-      Tracing: Active
-      AutoPublishAlias: live
+      Name: security-lambda
+      AutoPublish: true
+      FunctionCode: |
+        function handler(event) {
+            function addHeaderIfNotExists(headers, headerName, headerValue) {
+                if (!(headerName in headers)) {
+                    headers[headerName] = { value: headerValue };
+                }
+            }
+            
+            var response = event.response;
+            var headers = response.headers;
+            
+            addHeaderIfNotExists(headers, 'strict-transport-security','max-age=63072000; includeSubDomains; preload');
+            addHeaderIfNotExists(headers, 'x-xss-protection', '1; mode=block');
+            addHeaderIfNotExists(headers, 'x-content-type-options', 'nosniff');
+            addHeaderIfNotExists(headers, 'x-frame-options', 'DENY');
+            addHeaderIfNotExists(headers, 'referrer-policy', 'no-referrer-when-downgrade');
+            addHeaderIfNotExists(headers, 'feature-policy', 'accelerometer none; midi none; battery none; microphone none; magnetometer none; gyroscope none; usb none; fullscreen self; payment none;');
+            addHeaderIfNotExists(headers, 'nel', '{"report_to":"default","max_age":31536000,"include_subdomains":true}');
+            addHeaderIfNotExists(headers, 'permission-policy', 'accelerometer=(); midi=(); battery=(); microphone=(); magnetometer=(); gyroscope=(); usb=(); fullscreen=(self); payment=();clipboard-read=();');
+            
+            return response;
+        }
+      FunctionConfig:
+        Comment: Add security headers
+        Runtime: cloudfront-js-1.0
 
   CloudFrontLambdaRole:
     Type: AWS::IAM::Role
@@ -60,9 +78,9 @@ Resources:
             - GET
             - OPTIONS
           Compress: true
-          LambdaFunctionAssociations:
+          FunctionAssociations:
             - EventType: viewer-response
-              LambdaFunctionARN: !Ref CloudFrontSecurityLambda.Version
+              FunctionARN: !GetAtt CloudFrontSecurityFunction.FunctionMetadata.FunctionARN
           ForwardedValues:
             QueryString: true
             Cookies:
