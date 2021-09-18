@@ -5,7 +5,7 @@ Resources:
   CloudFrontSecurityFunction:
     Type: AWS::CloudFront::Function
     Properties:
-      Name: security-lambda
+      Name: !Sub ${AWS::StackName}-security-function
       AutoPublish: true
       FunctionCode: |
         function handler(event) {
@@ -14,10 +14,10 @@ Resources:
                     headers[headerName] = { value: headerValue };
                 }
             }
-            
+
             var response = event.response;
             var headers = response.headers;
-            
+
             addHeaderIfNotExists(headers, 'strict-transport-security','max-age=63072000; includeSubDomains; preload');
             addHeaderIfNotExists(headers, 'x-xss-protection', '1; mode=block');
             addHeaderIfNotExists(headers, 'x-content-type-options', 'nosniff');
@@ -26,29 +26,55 @@ Resources:
             addHeaderIfNotExists(headers, 'feature-policy', 'accelerometer none; midi none; battery none; microphone none; magnetometer none; gyroscope none; usb none; fullscreen self; payment none;');
             addHeaderIfNotExists(headers, 'nel', '{"report_to":"default","max_age":31536000,"include_subdomains":true}');
             addHeaderIfNotExists(headers, 'permission-policy', 'accelerometer=(); midi=(); battery=(); microphone=(); magnetometer=(); gyroscope=(); usb=(); fullscreen=(self); payment=();clipboard-read=();');
-            
+
             return response;
         }
       FunctionConfig:
         Comment: Add security headers
         Runtime: cloudfront-js-1.0
 
-  CloudFrontLambdaRole:
-    Type: AWS::IAM::Role
+  CloudFrontSecurityFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
     Properties:
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          Effect: Allow
-          Action:
-            - sts:AssumeRole
-          Principal:
-            Service:
-              - lambda.amazonaws.com
-              - edgelambda.amazonaws.com
+      LogGroupName: !Sub /aws/cloudfront/function/${AWS::StackName}-security-function
+      RetentionInDays: 90
+
+  CloudFrontRedirectFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${AWS::StackName}-country-based-redirect-function
+      AutoPublish: true
+      FunctionCode: |
+        function handler(event) {
+            var redirects = {
+                'SE': '/kontakt/',
+                'PL': '/o-nas/'
+            };
+            var headers = event.request.headers;
+            var newPath = '/o-nas/';
+
+            var country = headers['cloudfront-viewer-country'].value;
+            if (country in redirects) {
+                newPath = redirects[country];
+            }
+
+            console.log(`Sample log to show in Log Group. NewPath=${newPath}`);
+
+            return {
+                statusCode: 307,
+                statusDescription: 'Temporary Redirect',
+                headers: {"location": {"value": newPath}}
+            };
+        }
+      FunctionConfig:
+        Comment: Redirect base on country
+        Runtime: cloudfront-js-1.0
+
+  CloudFrontRedirectFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/cloudfront/function/${AWS::StackName}-country-based-redirect-function
+      RetentionInDays: 90
 
   CloudFront:
     Type: AWS::CloudFront::Distribution
@@ -61,6 +87,29 @@ Resources:
           Prefix: CloudFront/
         HttpVersion: http2
         PriceClass: PriceClass_100
+        CacheBehaviors:
+          - TargetOriginId: Custom-website
+            PathPattern: /
+            ViewerProtocolPolicy: redirect-to-https
+            MinTTL: 0
+            AllowedMethods:
+              - HEAD
+              - GET
+              - OPTIONS
+            CachedMethods:
+              - HEAD
+              - GET
+              - OPTIONS
+            Compress: true
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt CloudFrontRedirectFunction.FunctionMetadata.FunctionARN
+            ForwardedValues:
+              QueryString: false
+              Headers:
+                - CloudFront-Viewer-Country
+              Cookies:
+                Forward: none
         DefaultCacheBehavior:
           TargetOriginId: Custom-website
           ViewerProtocolPolicy: redirect-to-https
@@ -134,7 +183,7 @@ Resources:
     Properties:
       LifecycleConfiguration:
         Rules:
-          - ExpirationInDays: 180
+          - ExpirationInDays: 90
             Status: Enabled
       AccessControl: Private
       PublicAccessBlockConfiguration:

@@ -3,6 +3,7 @@
 Sample app containing examples of CloudFront Functions.
 
 * Add security headers
+* Redirect based on country
 
 ## Setup
 
