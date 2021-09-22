@@ -2,41 +2,41 @@ AWSTemplateFormatVersion: 2010-09-09
 Transform: AWS::Serverless-2016-10-31
 
 Resources:
-  CloudFrontSecurityFunction:
+  CloudFrontRedirectFunction:
     Type: AWS::CloudFront::Function
     Properties:
-      Name: !Sub ${AWS::StackName}-security-function
+      Name: !Sub ${AWS::StackName}-country-based-redirect-function
       AutoPublish: true
       FunctionCode: |
         function handler(event) {
-            function addHeaderIfNotExists(headers, headerName, headerValue) {
-                if (!(headerName in headers)) {
-                    headers[headerName] = { value: headerValue };
-                }
+            var redirects = {
+                'SE': '/kontakt/',
+                'PL': '/pl/index.html'
+            };
+            var headers = event.request.headers;
+            var newPath = '/o-nas/';
+
+            var country = headers['cloudfront-viewer-country'].value;
+            if (country in redirects) {
+                newPath = redirects[country];
             }
 
-            var response = event.response;
-            var headers = response.headers;
+            console.log(`Sample log to show in Log Group. NewPath=${newPath}`);
 
-            addHeaderIfNotExists(headers, 'strict-transport-security','max-age=63072000; includeSubDomains; preload');
-            addHeaderIfNotExists(headers, 'x-xss-protection', '1; mode=block');
-            addHeaderIfNotExists(headers, 'x-content-type-options', 'nosniff');
-            addHeaderIfNotExists(headers, 'x-frame-options', 'DENY');
-            addHeaderIfNotExists(headers, 'referrer-policy', 'no-referrer-when-downgrade');
-            addHeaderIfNotExists(headers, 'feature-policy', 'accelerometer none; midi none; battery none; microphone none; magnetometer none; gyroscope none; usb none; fullscreen self; payment none;');
-            addHeaderIfNotExists(headers, 'nel', '{"report_to":"default","max_age":31536000,"include_subdomains":true}');
-            addHeaderIfNotExists(headers, 'permission-policy', 'accelerometer=(); midi=(); battery=(); microphone=(); magnetometer=(); gyroscope=(); usb=(); fullscreen=(self); payment=();clipboard-read=();');
-
-            return response;
+            return {
+                statusCode: 307,
+                statusDescription: 'Temporary Redirect',
+                headers: {"location": {"value": newPath}}
+            };
         }
       FunctionConfig:
-        Comment: Add security headers
+        Comment: Redirect base on country
         Runtime: cloudfront-js-1.0
 
-  CloudFrontSecurityFunctionLogGroup:
+  CloudFrontRedirectFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/cloudfront/function/${AWS::StackName}-security-function
+      LogGroupName: !Sub /aws/cloudfront/function/${AWS::StackName}-country-based-redirect-function
       RetentionInDays: 90
 
   CloudFront:
@@ -50,6 +50,29 @@ Resources:
           Prefix: CloudFront/
         HttpVersion: http2
         PriceClass: PriceClass_100
+        CacheBehaviors:
+          - TargetOriginId: Custom-website
+            PathPattern: /
+            ViewerProtocolPolicy: redirect-to-https
+            MinTTL: 0
+            AllowedMethods:
+              - HEAD
+              - GET
+              - OPTIONS
+            CachedMethods:
+              - HEAD
+              - GET
+              - OPTIONS
+            Compress: true
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt CloudFrontRedirectFunction.FunctionMetadata.FunctionARN
+            ForwardedValues:
+              QueryString: false
+              Headers:
+                - CloudFront-Viewer-Country
+              Cookies:
+                Forward: none
         DefaultCacheBehavior:
           TargetOriginId: Custom-website
           ViewerProtocolPolicy: redirect-to-https
@@ -67,9 +90,9 @@ Resources:
             - GET
             - OPTIONS
           Compress: true
-          FunctionAssociations:
-            - EventType: viewer-response
-              FunctionARN: !GetAtt CloudFrontSecurityFunction.FunctionMetadata.FunctionARN
+#          FunctionAssociations:
+#            - EventType: viewer-response
+#              FunctionARN: !GetAtt xxx.FunctionMetadata.FunctionARN
           ForwardedValues:
             QueryString: true
             Cookies:
