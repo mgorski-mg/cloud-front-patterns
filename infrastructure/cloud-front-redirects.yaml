@@ -90,9 +90,6 @@ Resources:
             - GET
             - OPTIONS
           Compress: true
-#          FunctionAssociations:
-#            - EventType: viewer-response
-#              FunctionARN: !GetAtt xxx.FunctionMetadata.FunctionARN
           ForwardedValues:
             QueryString: true
             Cookies:
@@ -100,10 +97,6 @@ Resources:
             Headers:
               - Accept
         Origins:
-          - DomainName: !GetAtt WebsiteBucket.DomainName
-            Id: S3-website
-            S3OriginConfig:
-              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}
           - DomainName: rozchmurzeni.pl
             Id: Custom-website
             CustomOriginConfig:
@@ -111,35 +104,6 @@ Resources:
               OriginProtocolPolicy: https-only
               OriginSSLProtocols:
                 - TLSv1.2
-
-  CloudFrontOriginAccessIdentity:
-    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
-    Properties:
-      CloudFrontOriginAccessIdentityConfig:
-        Comment: !Sub Identity to access ${WebsiteBucket}
-
-  WebsiteBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      AccessControl: Private
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-
-  WebsiteBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref WebsiteBucket
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
-            Action: s3:GetObject
-            Resource: !Sub ${WebsiteBucket.Arn}/*
 
   LoggingBucket:
     Type: AWS::S3::Bucket
