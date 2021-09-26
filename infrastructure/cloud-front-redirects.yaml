@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: 2010-09-09
 Transform: AWS::Serverless-2016-10-31
 
 Resources:
-  CloudFrontRedirectFunction:
+  CloudFrontCountryBasedRedirectFunction:
     Type: AWS::CloudFront::Function
     Properties:
       Name: !Sub ${AWS::StackName}-country-based-redirect-function
@@ -33,21 +33,59 @@ Resources:
         Comment: Redirect base on country
         Runtime: cloudfront-js-1.0
 
-  CloudFrontRedirectFunctionLogGroup:
+  CloudFrontCountryBasedRedirectFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/cloudfront/function/${AWS::StackName}-country-based-redirect-function
       RetentionInDays: 90
 
-  CloudFront:
+  CloudFrontNonWwwRedirectFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${AWS::StackName}-non-www-redirect-function
+      AutoPublish: true
+      FunctionCode: |
+        function handler(event) {
+            var request = event.request;
+            var headers = request.headers;
+
+            var params = Object.keys(request.querystring).map(key => key + '=' + request.querystring[key].value).join('&');
+            if (params.length > 0) {
+                params = '?' + params;
+            }
+
+            // When the CloudFrontNonWww will be reached through domain, eg. sample-domain.com, the redirected address www.sample-domain.com will direct to MainCloudFront.
+            var newPath = `https://www.${headers.host.value}${request.uri}${params}`;
+
+            console.log(`Sample log to show in Log Group. NewPath=${newPath}`);
+
+            return {
+                statusCode: 307,
+                statusDescription: 'Temporary Redirect',
+                headers: {"location": {"value": newPath}}
+            };
+        }
+      FunctionConfig:
+        Comment: Redirect base on country
+        Runtime: cloudfront-js-1.0
+
+  CloudFrontNonWwwRedirectFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/cloudfront/function/${AWS::StackName}-non-www-redirect-function
+      RetentionInDays: 90
+
+  MainCloudFront:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
+        Aliases:
+          - www.example-domain.com
         Enabled: true
         Logging:
           Bucket: !GetAtt LoggingBucket.DomainName
           IncludeCookies: false
-          Prefix: CloudFront/
+          Prefix: MainCloudFront/
         HttpVersion: http2
         PriceClass: PriceClass_100
         CacheBehaviors:
@@ -66,7 +104,7 @@ Resources:
             Compress: true
             FunctionAssociations:
               - EventType: viewer-request
-                FunctionARN: !GetAtt CloudFrontRedirectFunction.FunctionMetadata.FunctionARN
+                FunctionARN: !GetAtt CloudFrontCountryBasedRedirectFunction.FunctionMetadata.FunctionARN
             ForwardedValues:
               QueryString: false
               Headers:
@@ -104,6 +142,63 @@ Resources:
               OriginProtocolPolicy: https-only
               OriginSSLProtocols:
                 - TLSv1.2
+        ViewerCertificate:
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2019
+          AcmCertificateArn: [arn]
+
+  CloudFrontNonWww:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Aliases:
+          - example-domain.com
+        Enabled: true
+        Logging:
+          Bucket: !GetAtt LoggingBucket.DomainName
+          IncludeCookies: false
+          Prefix: CloudFrontNonWww/
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        DefaultCacheBehavior:
+          TargetOriginId: Custom-website
+          ViewerProtocolPolicy: redirect-to-https
+          MinTTL: 0
+          AllowedMethods:
+            - HEAD
+            - GET
+            - OPTIONS
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - HEAD
+            - GET
+            - OPTIONS
+          Compress: true
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt CloudFrontNonWwwRedirectFunction.FunctionMetadata.FunctionARN
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: all
+            Headers:
+              - Accept
+              - Host
+        Origins:
+          - DomainName: rozchmurzeni.pl
+            Id: Custom-website
+            CustomOriginConfig:
+              HTTPSPort: '443'
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+        ViewerCertificate:
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2019
+          AcmCertificateArn: [arn]
 
   LoggingBucket:
     Type: AWS::S3::Bucket
