@@ -3,10 +3,12 @@
 Sample app containing examples of CloudFront Functions.
 
 * cloud-front-functions.yaml
-  * Add security headers
+    * Add security headers \[Obsolete solution\]
+* cloud-front-headers.yaml
+    * Add security headers using Response Headers Policy
 * cloud-front-redirects.yaml
-  * Redirect based on country
-  * Redirect non www
+    * Redirect based on country
+    * Redirect non www
 
 ## Setup
 

@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  CloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Logging:
+          Bucket: !GetAtt LoggingBucket.DomainName
+          IncludeCookies: false
+          Prefix: CloudFront/
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        DefaultCacheBehavior:
+          TargetOriginId: Custom-website
+          ViewerProtocolPolicy: redirect-to-https
+          MinTTL: 0
+          AllowedMethods:
+            - HEAD
+            - GET
+            - OPTIONS
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - HEAD
+            - GET
+            - OPTIONS
+          Compress: true
+        #          ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy # not supported yet
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized managed policy
+        Origins:
+          - DomainName: rozchmurzeni.pl
+            Id: Custom-website
+            CustomOriginConfig:
+              HTTPSPort: '443'
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+
+  ResponseHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub ${AWS::StackName}-security-response-headers-policy
+        SecurityHeadersConfig:
+          ContentSecurityPolicy:
+            ContentSecurityPolicy: default-src 'none'; img-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none'
+            Override: false
+          ContentTypeOptions: # automatically adds 'nosniff'
+            Override: false
+          FrameOptions:
+            FrameOption: DENY
+            Override: false
+          ReferrerPolicy:
+            ReferrerPolicy: no-referrer-when-downgrade
+            Override: false
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 63072000
+            IncludeSubdomains: true
+            Preload: true
+            Override: false
+          XSSProtection:
+            ModeBlock: true
+            Protection: true
+            Override: false
+        CustomHeadersConfig:
+          Items:
+            - Header: feature-policy
+              Value: accelerometer none; midi none; battery none; microphone none; magnetometer none; gyroscope none; usb none; fullscreen self; payment none;
+              Override: false
+            - Header: nel
+              Value: '{"report_to":"default","max_age":31536000,"include_subdomains":true}'
+              Override: false
+            - Header: permission-policy
+              Value: accelerometer=(); midi=(); battery=(); microphone=(); magnetometer=(); gyroscope=(); usb=(); fullscreen=(self); payment=();clipboard-read=();
+              Override: false
+
+  LoggingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays: 90
+            Status: Enabled
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
