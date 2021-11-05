@@ -131,12 +131,7 @@ Resources:
             - GET
             - OPTIONS
           Compress: true
-          ForwardedValues:
-            QueryString: true
-            Cookies:
-              Forward: all
-            Headers:
-              - Accept
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized managed policy
         Origins:
           - DomainName: rozchmurzeni.pl
             Id: Custom-website
@@ -183,13 +178,7 @@ Resources:
           FunctionAssociations:
             - EventType: viewer-request
               FunctionARN: !GetAtt CloudFrontNonWwwRedirectFunction.FunctionMetadata.FunctionARN
-          ForwardedValues:
-            QueryString: true
-            Cookies:
-              Forward: all
-            Headers:
-              - Accept
-              - Host
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized managed policy
         Origins:
           - DomainName: rozchmurzeni.pl
             Id: Custom-website
