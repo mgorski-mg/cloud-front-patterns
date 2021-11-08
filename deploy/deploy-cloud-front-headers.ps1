@@ -1,5 +1,5 @@
 sam deploy `
-    --template-file $PSScriptRoot/infrastructure/cloud-front-headers.yaml `
+    --template-file $PSScriptRoot/../infrastructure/cloud-front-headers.yaml `
     --stack-name cloud-front-headers `
     --s3-bucket [s3-bucket-name]  `
     --s3-prefix cloud-front-headers `
