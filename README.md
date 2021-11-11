@@ -1,14 +1,14 @@
-# CloudFront Functions
+# Amazon CloudFront Patterns
 
-Sample app containing examples of CloudFront Functions.
+Sample app containing examples of CloudFront Patterns.
 
 * cloud-front-functions.yaml
-    * Add security headers \[Obsolete solution\]
+    * Add security headers using CloudFront Function \[Obsolete solution\]
 * cloud-front-headers.yaml
     * Add security headers using Response Headers Policy
 * cloud-front-redirects.yaml
-    * Redirect based on country
-    * Redirect non www
+    * Redirect based on country using CloudFront Function
+    * Redirect non www to www using CloudFront Function
 
 ## Setup
 
