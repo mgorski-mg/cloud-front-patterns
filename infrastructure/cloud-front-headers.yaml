@@ -30,7 +30,7 @@ Resources:
             - GET
             - OPTIONS
           Compress: true
-        #          ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy # not supported yet
+          ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized managed policy
         Origins:
           - DomainName: rozchmurzeni.pl
